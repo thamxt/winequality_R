@@ -1,0 +1,218 @@
+---
+title: "Untitled"
+author: "Nhóm 5"
+date: "12/10/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(caTools)
+library(caret)
+library(GGally)
+library(corrplot)
+library(plotly)
+library(party)
+library(rpart)
+library(rpart.plot)
+library(Metrics)
+library(rattle)
+dataFrame<- read.csv("winequalityN.csv")
+
+
+```
+
+```{r}
+sum(is.na(dataFrame))
+dataFrame<-na.omit(dataFrame)
+```
+
+```{r}
+hist(dataFrame$quality, main= "Quality", col= "blue")
+```
+
+```{r}
+
+plot(dataFrame$quality,dataFrame$alcohol,pch=16,col = "blue")
+reg = lm(dataFrame$alcohol~dataFrame$quality)
+abline(reg,col = "blue",lwd = 1)
+```
+
+```{r}
+
+plot(dataFrame$quality,dataFrame$density,pch=16,col = "blue")
+reg = lm(dataFrame$density~dataFrame$quality)
+abline(reg,col = "blue",lwd = 1)
+```
+
+```{r}
+
+dataFrame1<-dataFrame
+dataFrame1$qualitychar <- ifelse(dataFrame1$quality == 3, "Three", ifelse(dataFrame1$quality == 4, "Four", ifelse(dataFrame1$quality == 5, "Five", ifelse(dataFrame1$quality == 6, "Six", ifelse(dataFrame1$quality == 7, "Seven", ifelse(dataFrame1$quality == 8, "Eight", "Nine"))) )))
+
+plot_ly(data = dataFrame1, x = ~qualitychar, y = ~alcohol, color = ~qualitychar, type = "box", colors = "Dark2")
+```
+
+
+```{r}
+plot_ly(data = dataFrame1, x = ~qualitychar, y = ~density, color = ~qualitychar, type = "box", colors = "Dark2")
+```
+
+```{r}
+cor(dataFrame$quality,dataFrame$alcohol)
+cor(dataFrame$quality, dataFrame$density)
+M <-cor(dataFrame[,-1])
+corrplot(M, method = 'color', order = 'alphabet')
+##corrplot(M, method = 'square', order = 'FPC', type = 'lower', diag = FALSE)
+```
+
+# Tách tập dữ liệu
+sử dụng createDataPartition để chia tập dữ liệu thành 2 tập train(80%)và Test(20%)
+```{r }
+set.seed(1)
+index <- createDataPartition(dataFrame$quality, p = .8, list = FALSE)
+train <- dataFrame[index,]
+test  <- dataFrame[-index,]
+```
+
+# Huấn luyện mô hình
+Sử dụng thư viện caret để huấn luyện các mô hình, sử dụng cross validation chia làm 10 fold. Để làm điều này, chúng ta cần chuyển ba tham số method = "repeatedcv", number = 10. Chúng tôi lưu trữ kết quả này trong một biến.
+```{r}
+trControl <- trainControl(method = "repeatedcv", number = 10, repeats = 5)
+```
+
+#  Model KNN Regression
+```{r}
+set.seed(1)
+model <- train(quality ~.,
+              data = train,
+              tuneGrid = expand.grid(k=1:10),
+              method = 'knn',
+              metric = 'MAE',
+              trControl = trControl,
+              preProcess = c('center', 'scale'))
+
+```
+
+#  Model Performance
+```{r}
+model
+```
+
+#  Visualization
+```{r}
+plot(model)
+```
+
+# Loess r-squared variable importance
+```{r}
+varImp (model)
+```
+
+# Kiểm tra trên dữ liệu thử nghiệm để xem kết quả.
+
+Tóm lược thực tế
+```{r}
+actual <- (test$quality)
+summary(actual)
+```
+
+Tóm lược dự đoán
+```{r}
+pred <- predict(model, test)
+summary(pred)
+```
+
+RMSE
+```{r}
+RMSE <- sqrt(mean((actual - pred)^2))
+RMSE
+```
+
+Rsquared
+```{r}
+R2 <- cor(actual, pred) ^ 2
+R2
+```
+
+MAE
+```{r}
+MAE <-  mean(abs(actual - pred))
+MAE
+```
+
+#Đánh giá model trên tập training
+
+lm.fit1 <- lm( quality ∼  . - type     , data = train)
+```{r }
+summary (lm.fit1)
+summary(lm.fit1)$r.squared
+summary(lm.fit1)$sigma
+mae(train$quality, predict(lm.fit1))
+```
+
+lm.fit2 <- lm( quality ∼   volatile.acidity  + alcohol   , data = train)
+```{r }
+summary (lm.fit2)
+summary(lm.fit2)$r.squared
+summary(lm.fit2)$sigma
+mae(train$quality, predict(lm.fit2))
+```
+ 
+# Đánh giá model trên tập test
+lm.test1 <- lm( quality ∼  . - type  , data = test)
+```{r }
+summary (lm.test1)
+summary(lm.test1)$r.squared
+summary(lm.test1)$sigma
+mae(test$quality, predict(lm.test1))
+```
+
+lm.test2 <- lm( quality ∼  volatile.acidity  + alcohol  , data = test)
+
+```{r }
+summary (lm.test2)
+summary(lm.test2)$r.squared
+summary(lm.test2)$sigma
+
+mae(test$quality, predict(lm.test2))
+```
+
+```{r }
+inverseResponsePlot(model = lm.test2, id.n = 5)
+```
+
+# decision tree
+
+```{r}
+#building model decision tree in data train
+m=rpart(quality ~.,data=train)
+m
+```
+
+```{r}
+summary(m)
+```
+```{r}
+fancyRpartPlot(m)
+```
+```{r}
+rsq.rpart(m)
+```
+```{r}
+p=predict(m,test)
+summary(p)
+```
+```{r}
+MAE <- function(actual, predicted){
+  mean(abs(actual - predicted))
+}
+
+MAE(test$quality, p)
+```
